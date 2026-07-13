@@ -29,6 +29,10 @@ export function useProposalState(proposalId: string) {
         args: [BigInt(proposalId)],
       },
     ],
+    query: {
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: true,
+    },
   });
 
   const stateResult = data?.[0]?.result;

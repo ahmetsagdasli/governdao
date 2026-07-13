@@ -17,7 +17,11 @@ export function useProposalsVotes(proposalIds: string[]) {
       functionName: "proposalVotes",
       args: [BigInt(proposalId)],
     })),
-    query: { enabled: proposalIds.length > 0 },
+    query: {
+      enabled: proposalIds.length > 0,
+      refetchInterval: 15_000,
+      refetchOnWindowFocus: true,
+    },
   });
 
   const tallies: ProposalVoteTally[] = proposalIds.map((proposalId, index) => {
