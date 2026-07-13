@@ -5,46 +5,75 @@ An on-chain governance dApp on Sepolia: an ERC20Votes governance token, an OpenZ
 queued, and time-delayed proposals can mutate. The frontend reads proposal/vote state live
 from the chain and uses Supabase purely as a cache for human-readable metadata.
 
+**Live:** [governdao.vercel.app](https://governdao.vercel.app)
+
 ## Architecture
 
-```
-                         ┌─────────────────────┐
-                         │   GovernanceToken    │
-                         │  (ERC20Votes/Permit) │
-                         └──────────┬───────────┘
-                                    │ voting power (checkpoints)
-                                    ▼
-┌──────────────┐   propose/vote   ┌──────────────┐   queue/execute   ┌────────────────────┐
-│    Voters     │ ───────────────▶│  DAOGovernor  │ ─────────────────▶│  TimelockController │
-│ (MetaMask via │                 │ (Governor +   │                   │  (PROPOSER=Governor)│
-│  RainbowKit)  │◀─────────────── │  extensions)  │◀───────────────── │  (EXECUTOR=address0)│
-└───────┬───────┘   state/votes   └──────────────┘   ready/executed   └──────────┬──────────┘
-        │                                                                        │ onlyOwner
-        │ writes (after tx confirmed)                                           ▼
-        ▼                                                              ┌─────────────────┐
-┌──────────────┐        reads (metadata + vote cache)                  │     Treasury     │
-│   Supabase    │◀───────────────────────────────────────────────────  │ (Ownable: owner  │
-│  (proposals,  │                                                      │  = timelock)     │
-│  votes_cache) │                                                      └─────────────────┘
-└──────────────┘
+```mermaid
+flowchart TB
+    Wallet["🦊 MetaMask / RainbowKit"]
 
-Frontend (Vite + React + wagmi/viem + RainbowKit) talks directly to the chain for all
-state/vote reads and writes; Supabase is written to only after a transaction receipt confirms.
+    subgraph Client["Frontend — Vite + React + wagmi/viem"]
+        UI["GovernDAO UI"]
+    end
+
+    subgraph Chain["⛓️ Sepolia"]
+        Token["GovernanceToken\nERC20Votes / Permit"]
+        Governor["DAOGovernor"]
+        Timelock["TimelockController"]
+        Treasury["Treasury"]
+    end
+
+    subgraph Cache["Supabase"]
+        DB[("proposals\nvotes_cache")]
+    end
+
+    Wallet -- "sign tx" --> UI
+    UI -- "propose · castVote · queue · execute" --> Governor
+    UI -- "read state · votes · quorum" --> Governor
+    Governor -- "checkpoints · getPastVotes" --> Token
+    Governor -- "queue / execute" --> Timelock
+    Timelock -- "onlyOwner" --> Treasury
+    UI -- "write after tx confirms" --> DB
+    UI -- "read titles + vote log" --> DB
+
+    classDef frontend fill:#4C3FCB,color:#ffffff,stroke:#3C31A8,stroke-width:2px
+    classDef chain fill:#15803D,color:#ffffff,stroke:#0f5c2c,stroke-width:2px
+    classDef cache fill:#B45309,color:#ffffff,stroke:#8a4006,stroke-width:2px
+    classDef wallet fill:#B91C1C,color:#ffffff,stroke:#8a1515,stroke-width:2px
+
+    class UI frontend
+    class Token,Governor,Timelock,Treasury chain
+    class DB cache
+    class Wallet wallet
 ```
+
+The frontend talks directly to the chain for every state/vote read and every write; Supabase
+is written to only *after* a transaction receipt confirms, and only stores human-readable
+proposal metadata + a vote log for display — it never holds tallies or execution state.
 
 ## Governance lifecycle
 
-```
-Pending → Active → Succeeded → Queued → Executed
-            │
-            └──▶ Defeated (quorum not met, or against > for)
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: propose()
+    Pending --> Active: after votingDelay
+    Active --> Defeated: quorum not met, or against ≥ for
+    Active --> Succeeded: quorum met and for > against
+    Succeeded --> Queued: queue()
+    Queued --> Executed: timelock delay elapsed, execute()
+    Defeated --> [*]
+    Executed --> [*]
 
-Pending   : proposal created, voting has not started (votingDelay blocks).
-Active    : voting window open (votingPeriod blocks); castVote / castVoteWithReason.
-Succeeded : voting closed, quorum met, for > against.
-Defeated  : voting closed, quorum not met or against ≥ for.
-Queued    : governor.queue() submitted the operation to the TimelockController.
-Executed  : timelock minDelay elapsed and governor.execute() ran the call (Treasury.store).
+    classDef pending fill:#B45309,color:#ffffff
+    classDef active fill:#4C3FCB,color:#ffffff
+    classDef good fill:#15803D,color:#ffffff
+    classDef bad fill:#B91C1C,color:#ffffff
+
+    class Pending pending
+    class Active active
+    class Succeeded,Queued,Executed good
+    class Defeated bad
 ```
 
 Testnet parameters (see `contracts/scripts/deploy.ts`): 1-block voting delay, 300-block voting
@@ -83,6 +112,20 @@ cp .env.example .env   # fill in WalletConnect / Supabase / contract addresses
 npm run dev
 ```
 
+## Local end-to-end demo (no Sepolia ETH needed)
+
+```bash
+cd contracts
+npx hardhat node                    # in one terminal
+npm run demo:localhost              # in another: deploys fresh contracts, funds
+                                     # 10 accounts, creates a proposal, votes, executes
+```
+
+This writes `frontend/.env.local` with the local contract addresses and `VITE_CHAIN_ID=31337`,
+which Vite loads *on top of* `frontend/.env` — so local testing never touches your real Sepolia
+or Supabase configuration. Run `npm run dev` in `frontend/` afterward and switch your wallet to
+the Hardhat network (chain id `31337`, RPC `http://127.0.0.1:8545`) to see it live.
+
 ## Deploy to Sepolia
 
 ```bash
@@ -120,9 +163,11 @@ append-only via the anon key.
 
 ## Deploy to Vercel
 
-1. Import the `frontend/` directory as the project root in Vercel.
+1. Import the `frontend/` directory as the project root in Vercel (Root Directory = `frontend`).
 2. Set the environment variables from `frontend/.env.example` in the Vercel project settings.
 3. Deploy — `vercel.json` rewrites all routes to `index.html` for client-side routing.
+4. Connect the GitHub repository (`vercel git connect` or via the dashboard) for automatic
+   deploys on every push to `main`.
 
 ## Security review (see acceptance checklist)
 
