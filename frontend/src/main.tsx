@@ -20,6 +20,7 @@ ReactDOM.createRoot(rootElement).render(
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
+          locale="en-US"
           theme={lightTheme({
             accentColor: "#4C3FCB",
             accentColorForeground: "white",
