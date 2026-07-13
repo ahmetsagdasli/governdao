@@ -16,6 +16,7 @@ import {
   shouldReadGovernanceEvents,
 } from "../lib/governanceEvents";
 import { useProposalState } from "../hooks/useProposalState";
+import { useBlockTime } from "../hooks/useBlockTime";
 import { ProposalStateBadge } from "../components/ProposalStateBadge";
 import { VoteBar } from "../components/VoteBar";
 import { VotePanel } from "../components/VotePanel";
@@ -126,6 +127,9 @@ export function ProposalDetail() {
     refetch,
   } = useProposalState(proposalId ?? "0");
 
+  const snapshotTime = useBlockTime(snapshot);
+  const deadlineTime = useBlockTime(deadline);
+
   const { data: eta } = useReadContract({
     address: GOVERNOR_ADDRESS,
     abi: governorAbi,
@@ -213,12 +217,22 @@ export function ProposalDetail() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-          <p className="text-sm text-muted">Snapshot block</p>
-          <p className="mt-1 text-ink">{snapshot?.toString() ?? "—"}</p>
+          <p className="text-sm text-muted">Voting power counted as of</p>
+          <p className="mt-1 text-ink">
+            {snapshotTime ? new Date(snapshotTime).toLocaleString() : "—"}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Block {snapshot?.toString() ?? "—"}
+          </p>
         </div>
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-          <p className="text-sm text-muted">Deadline block</p>
-          <p className="mt-1 text-ink">{deadline?.toString() ?? "—"}</p>
+          <p className="text-sm text-muted">Voting closes</p>
+          <p className="mt-1 text-ink">
+            {deadlineTime ? new Date(deadlineTime).toLocaleString() : "—"}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Block {deadline?.toString() ?? "—"}
+          </p>
         </div>
       </div>
 
