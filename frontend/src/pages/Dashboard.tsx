@@ -6,7 +6,7 @@ import { ProposalCard } from "../components/ProposalCard";
 import { ProposalComparisonChart } from "../components/ProposalComparisonChart";
 import { GOVERNOR_ADDRESS, governorAbi } from "../config/contracts";
 import { formatTokenAmount } from "../lib/formatTokenAmount";
-import heroImage from "../../../images/istockphoto-2067646188-612x612.jpg";
+import heroImage from "../assets/governance-hero.jpg";
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
